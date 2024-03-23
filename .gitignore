@@ -2,4 +2,9 @@
 **/.DS_Store
 **/.idea
 **/*.docx
-
+*-sol/**
+*-sol.pdf
+*/tex
+*/environment.yml
+*/README.md
+**/make_zip.py
