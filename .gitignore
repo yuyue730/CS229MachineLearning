@@ -8,3 +8,5 @@
 */environment.yml
 */README.md
 **/make_zip.py
+**/*.csv.gz
+
