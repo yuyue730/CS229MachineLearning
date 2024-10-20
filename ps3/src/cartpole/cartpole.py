@@ -99,8 +99,40 @@ def initialize_mdp_data(num_states):
 
     Returns: The initial MDP parameters
     """
-
     # *** START CODE HERE ***
+    # Initialize the value function array to small random values, the array size is num_states
+    # Please note that np.random.rand(x) generates an array of x random number between 0 and 1.
+    values = np.random.rand(num_states) * 0.1
+
+    # Rewards should be the same size as values. All state rewards are initialized to zero.
+    rewards = np.zeros(num_states)
+
+    # rewards_count contains two num_states vectors, recording #0 rewards for every `new_state` and
+    # #1 the number of time `new_state` was reached. #0 and #1 means the first and second row.
+    rewards_count = np.zeros((num_states, 2))
+
+    # Initialize transition probabilities as a three-dimension matrix (or array), the size is
+    # (num_states, num_states, 2)
+    # Each matrix element P(s, s_prime, a) refers to the probability of transiting from State s to
+    # State s_prime if executing action a.
+    # Initialize each element in the transition probabilities matrix uniformly as (1/num_states).
+    transition_probabilities = np.ones((num_states, num_states, 2)) / num_states
+
+    # Initialize a three dimension matrix/array which counts number of transitions.
+    # transition_count[s, s_prime, a] means number of transitions from s to s_prime when action = a
+    # recorded.
+    # So transition_counts should have the same dimension as transition_probabilities.
+    transition_counts = np.zeros((num_states, num_states, 2))
+
+    return {
+        'values': values,
+        'rewards': rewards,
+        'rewards_count': rewards_count,
+        'transition_probabilities': transition_probabilities,
+        'transition_counts': transition_counts,
+        # For convenience, also pack num_states in the mdp_data dictionary.
+        'num_states': num_states
+    }
     # *** END CODE HERE ***
 
 def choose_action(state, mdp_data):
@@ -115,8 +147,25 @@ def choose_action(state, mdp_data):
     Returns:
         0 or 1 that is optimal according to your current MDP
     """
-
     # *** START CODE HERE ***
+    # For each state s, we try to calculate sum of
+    # transition_probability(s, s_prime, a) * values of s_prime
+    # for each s_prime (transit-to state)
+    #
+    # In vector language, it is the dot product for vector #1 transition_probabilities[s, :, a] and
+    # vector #2 values[:] for all s_prime.
+    #
+    # For each action a, a score can be achieved. return a who has the maximal score. a = 0 or 1
+    score_0 = np.dot(mdp_data['transition_probabilities'][state, :, 0], mdp_data['values'])
+    score_1 = np.dot(mdp_data['transition_probabilities'][state, :, 1], mdp_data['values'])
+    if score_0 > score_1:
+        action = 0
+    elif score_0 < score_1:
+        action = 1
+    else:
+        # When there is no optimal action, return 0 and 1 randomly.
+        action = 0 if np.random.uniform() < 0.5 else 1
+    return action
     # *** END CODE HERE ***
 
 def update_mdp_transition_counts_reward_counts(mdp_data, state, action, new_state, reward):
@@ -138,8 +187,16 @@ def update_mdp_transition_counts_reward_counts(mdp_data, state, action, new_stat
     Returns:
         Nothing
     """
-
     # *** START CODE HERE ***
+    mdp_data['transition_counts'][state, new_state, action] += 1
+
+    # Recall that #0 row of rewards_count matrix is a vector representing "rewards for every
+    # `new_state`.".
+    mdp_data['rewards_count'][new_state, 0] += reward
+
+    # Recall that #1 row of rewards_count matrix is a vector representing "number of time
+    # `new_state` was reached".
+    mdp_data['rewards_count'][new_state, 1] += 1
     # *** END CODE HERE ***
 
     # This function does not return anything
@@ -159,10 +216,28 @@ def update_mdp_transition_probs_reward(mdp_data):
 
     Returns:
         Nothing
-
     """
-
     # *** START CODE HERE ***
+    # Update the transition probabilities.
+    for a in [0, 1]:
+        for s in range(mdp_data['num_states']):
+            # We are now addressing state s transit to all s_prime.
+            # First, we want to count number of transitions from s to any other s_prime.
+            all_transition_from_s_count = np.sum(mdp_data['transition_counts'][s, :, a])
+
+            if all_transition_from_s_count > 0:
+                # Compute new probabilities only if the state has never been visited before. Aka, it
+                # has transition to other states
+                mdp_data['transition_probabilities'][s, :, a] = (
+                        mdp_data['transition_counts'][s, :, a] / all_transition_from_s_count)
+
+    # For each state (s), we define its
+    # reward = (reward for transition into s) / (total number of transition into s)
+    # If there is no transition into s, we keep the existing reward value.
+    for s in range(mdp_data['num_states']):
+        if mdp_data['rewards_count'][s, 1] > 0:
+            mdp_data['rewards'][s]\
+                = mdp_data['rewards_count'][s, 0] / mdp_data['rewards_count'][s, 1]
     # *** END CODE HERE ***
 
     # This function does not return anything
@@ -171,7 +246,6 @@ def update_mdp_transition_probs_reward(mdp_data):
 def update_mdp_value(mdp_data, tolerance, gamma):
     """
     Update the estimated values in your MDP.
-
 
     Perform value iteration using the new estimated model for the MDP.
     The convergence criterion should be based on `TOLERANCE` as described
@@ -186,10 +260,44 @@ def update_mdp_value(mdp_data, tolerance, gamma):
 
     Returns:
         True if the value iteration converged in one iteration
-
     """
-
     # *** START CODE HERE ***
+    iter = 0
+
+    while True:
+        iter = iter + 1
+
+        # The loop will exit when convergence condition is met.
+        new_values = np.zeros(mdp_data['num_states'])
+
+        # For each state s, compute its value:
+        # 1. For each action (0 or 1), compute sum of
+        # (transition_probabilities[s, s_prime, a] * rewards[s_prime]) for all s_prime.
+        # 2. Pick the largest value among all actions.
+        for s in range(mdp_data['num_states']):
+            new_values_for_action_0 = np.dot(
+                mdp_data['transition_probabilities'][s, :, 0], mdp_data['values'])
+            new_values_for_action_1 = np.dot(
+                mdp_data['transition_probabilities'][s, :, 1], mdp_data['values'])
+            new_values[s] = max(new_values_for_action_0, new_values_for_action_1)
+
+        # Apply Bellman Equation to new_values
+        new_values = mdp_data['rewards'] + gamma * new_values
+
+        # Decide whether this iteration has converged or not.
+        max_diff = float('-Inf')
+        for s in range(mdp_data['num_states']):
+            if abs(new_values[s] - mdp_data['values'][s]) > max_diff:
+                max_diff = abs(new_values[s] - mdp_data['values'][s])
+
+        # Update the values vector.
+        mdp_data['values'] = new_values
+
+        # Exit the loop if converged.
+        if max_diff < tolerance:
+            break
+
+    return iter == 1
     # *** END CODE HERE ***
 
 def main():
@@ -240,7 +348,6 @@ def main():
 
     consecutive_no_learning_trials = 0
     while consecutive_no_learning_trials < NO_LEARNING_THRESHOLD:
-
         action = choose_action(state, mdp_data)
 
         # Get the next state by simulating the dynamics
@@ -266,9 +373,7 @@ def main():
         # Recompute MDP model whenever pole falls
         # Compute the value function V for the new model
         if new_state == NUM_STATES - 1:
-
             update_mdp_transition_probs_reward(mdp_data)
-
             converged_in_one_iteration = update_mdp_value(mdp_data, TOLERANCE, GAMMA)
 
             if converged_in_one_iteration:
